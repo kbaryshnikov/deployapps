@@ -1,0 +1,87 @@
+#!/bin/bash
+
+if [ -z "${BASH_VERSINFO}" ] || [ -z "${BASH_VERSINFO[0]}" ] || [ ${BASH_VERSINFO[0]} -lt 4 ]; then
+    echo "This script requires Bash version >= 4"
+    exit 1
+fi
+
+####################################################################################################
+
+branch_name_to_tag() {
+    declare -n result="$1"
+    result=$(echo -n "$2" | sed -e 's/[^0-9a-zA-Z]/\-/g' -e 's/\(.*\)/\L\1/')
+}
+
+build_img_path() {
+    declare -n result="$1"
+    local app="$2"
+    local tag="$3"
+    local image="${APPS[$app]}"
+    result="${REGISTRY_BASE_URL}/${image}/manifests/${tag}"
+}
+
+app_tag_exists() {
+    local app="$1"
+    local tag="$2"
+    local img_path
+    build_img_path img_path "$app" "$tag"
+    curl --silent -f --head -lL "$img_path" 2>/dev/null
+    return $?
+}
+
+find_tag() {
+    declare -n result="$1"
+    local app="$2"
+    local custom_tag
+    if [[ ! -z "${BRANCHES[$app]}" ]]; then
+        branch_name_to_tag custom_tag "${BRANCHES[$app]}"
+    fi
+    local candidates="$NAMESPACE $custom_tag $DEFAULT_BRANCH"
+    local tag
+    for tag in $candidates; do
+        app_tag_exists "$app" "$tag" && { result="$tag"; break; }
+    done
+}
+
+deploy() {
+    local app="$1"
+    local tag="$2"
+    local args="${DEPLOY_ARGS[$app]}"
+    local extraset=""
+    if [[ ! -z "$args" ]]; then
+        extraset=",$args"
+    fi
+    local chart="{$CHARTS}/${app}"
+    helm upgrade -i "$app" "$chart" --set "image.tag=${tag}${extraset}" -n "$NAMESPACE"
+}
+
+deploy_apps() {
+    local app
+    local found_tag
+    for app in "${!APPS[@]}"; do
+        find_tag found_tag "$app"
+        if [[ -z ${found_tag} ]]; then
+            >&2 echo "No tags found for $app; skipping"
+        else
+            deploy "$app" "$found_tag"
+        fi
+    done
+}
+
+####################################################################################################
+
+if [[ -z "$1" ]]; then
+    >&2 echo "Usage: $(basename $0) branch-name"
+    exit 1
+fi
+
+branch_name_to_tag NAMESPACE "$1"
+
+CHARTS=$(dirname $0)/../charts
+ETC=$(dirname $0)/../etc
+. $ETC/apps
+. $ETC/branches
+
+branch_name_to_tag DEFAULT_TAG "$DEFAULT_BRANCH"
+
+deploy_apps

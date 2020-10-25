@@ -1,0 +1,22 @@
+BASE_DOMAIN="svc.linguix.info"
+REGISTRY_BASE_URL="https://${DOCKER_REGISTRY_NEXUS_CI_USERNAME}:${DOCKER_REGISTRY_NEXUS_CI_PASSWORD}@${NEXUS_REGISTRY}/v2/textly"
+
+declare -A APPS=(
+    ["languagetool"]="languagetool"
+    ["rld-consumer"]="redis-log-delivery-consumer"
+    ["rld-producer"]="redis-log-delivery-producer"
+    ["checker-api"]="checker-api"
+)
+
+declare -A DEPLOY_ARGS=(
+
+    ["rld-consumer"]="clickhouse.dsn=$CLICKHOUSE_DSN"
+
+    ["checker-api"]="clickhouse.dsn=$CLICKHOUSE_DSN,\
+postgres.password=$PG_PASS,\
+ingress.tls[0].hosts[0]=api.$NAMESPACE.$BASE_DOMAIN,\
+ingress.tls[0].secretName=api-checker-tls,\
+ingress.hosts[0].host=api.$NAMESPACE.$BASE_DOMAIN,\
+ingress.hosts[0].paths[0]=\"/\""
+
+)

@@ -1,0 +1,5 @@
+DEFAULT_BRANCH=master
+
+declare -A BRANCHES=(
+    ["checker-api"]="develop"
+)
